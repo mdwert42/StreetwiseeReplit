@@ -50,7 +50,11 @@ export class MemStorage implements IStorage {
 
     defaultProducts.forEach((product) => {
       const id = `product-${product.price.replace(".", "")}`;
-      const newProduct: Product = { ...product, id };
+      const newProduct: Product = { 
+        ...product, 
+        id,
+        isActive: product.isActive ?? true,
+      };
       this.products.set(id, newProduct);
     });
   }
@@ -68,6 +72,7 @@ export class MemStorage implements IStorage {
       startTime: new Date(),
       endTime: null,
       isActive: true,
+      isTest: insertSession.isTest ?? false,
     };
     this.sessions.set(id, session);
     return session;
@@ -98,6 +103,7 @@ export class MemStorage implements IStorage {
       id,
       timestamp: new Date(),
       pennies: insertTransaction.pennies ?? 0,
+      productId: insertTransaction.productId ?? null,
     };
     this.transactions.set(id, transaction);
     return transaction;
@@ -124,7 +130,11 @@ export class MemStorage implements IStorage {
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
     const id = randomUUID();
-    const product: Product = { ...insertProduct, id };
+    const product: Product = { 
+      ...insertProduct, 
+      id,
+      isActive: insertProduct.isActive ?? true,
+    };
     this.products.set(id, product);
     return product;
   }
