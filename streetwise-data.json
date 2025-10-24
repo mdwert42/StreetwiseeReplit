@@ -1,0 +1,24 @@
+{
+  "sessions": {},
+  "transactions": {},
+  "products": {
+    "product-100": {
+      "name": "Product $1",
+      "price": "1.00",
+      "isActive": true,
+      "id": "product-100"
+    },
+    "product-500": {
+      "name": "Product $5",
+      "price": "5.00",
+      "isActive": true,
+      "id": "product-500"
+    },
+    "product-1000": {
+      "name": "Product $10",
+      "price": "10.00",
+      "isActive": true,
+      "id": "product-1000"
+    }
+  }
+}

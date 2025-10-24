@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Play, Square, Plus, DollarSign } from "lucide-react";
+import { Play, Square, Plus, DollarSign, Clock, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { DonationModal } from "../components/donation-modal";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -172,20 +172,23 @@ export default function Dashboard() {
               />
             </div>
 
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="test-session"
-                data-testid="checkbox-test-session"
-                checked={isTestSession}
-                onCheckedChange={(checked) => setIsTestSession(checked === true)}
-                disabled={hasActiveSession || isProcessing}
-              />
+            <div className="flex items-center justify-between p-3 rounded-lg border-2 border-dashed border-border bg-muted/20">
               <Label
                 htmlFor="test-session"
                 className="text-sm font-medium cursor-pointer select-none"
               >
-                Mark as test session (not included in reporting)
+                Test Session Mode
+                <span className="block text-xs font-normal text-muted-foreground mt-0.5">
+                  Not included in totals
+                </span>
               </Label>
+              <Switch
+                id="test-session"
+                data-testid="checkbox-test-session"
+                checked={isTestSession}
+                onCheckedChange={setIsTestSession}
+                disabled={hasActiveSession || isProcessing}
+              />
             </div>
           </div>
 
@@ -231,7 +234,7 @@ export default function Dashboard() {
 
             {/* Product Buttons */}
             <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Product Sales</p>
+              <p className="text-sm font-medium text-muted-foreground">Quick Sales</p>
               <div className="space-y-2">
                 <Button
                   data-testid="button-product-1"
@@ -240,7 +243,7 @@ export default function Dashboard() {
                   variant="outline"
                   className="w-full h-12 justify-between text-base"
                 >
-                  <span className="font-semibold">Product $1</span>
+                  <span className="font-semibold">Good Advice</span>
                   <span className="flex items-center text-muted-foreground">
                     <DollarSign className="w-4 h-4" />1.00
                   </span>
@@ -252,7 +255,7 @@ export default function Dashboard() {
                   variant="outline"
                   className="w-full h-12 justify-between text-base"
                 >
-                  <span className="font-semibold">Product $5</span>
+                  <span className="font-semibold">Bad Advice</span>
                   <span className="flex items-center text-muted-foreground">
                     <DollarSign className="w-4 h-4" />5.00
                   </span>
@@ -264,7 +267,7 @@ export default function Dashboard() {
                   variant="outline"
                   className="w-full h-12 justify-between text-base"
                 >
-                  <span className="font-semibold">Product $10</span>
+                  <span className="font-semibold">Keychain</span>
                   <span className="flex items-center text-muted-foreground">
                     <DollarSign className="w-4 h-4" />10.00
                   </span>

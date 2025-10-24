@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
@@ -37,6 +38,8 @@ const COIN_DENOMINATIONS = [
 export function DonationModal({ open, onOpenChange, sessionId }: DonationModalProps) {
   const [counts, setCounts] = useState<DenominationCount>({});
   const [pennies, setPennies] = useState(0);
+  const [pennyInputMode, setPennyInputMode] = useState(false);
+  const [pennyInput, setPennyInput] = useState("");
   const { toast } = useToast();
 
   // Donation mutation
@@ -50,10 +53,8 @@ export function DonationModal({ open, onOpenChange, sessionId }: DonationModalPr
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/total"] });
-      toast({
-        title: "Donation Recorded",
-        description: "Donation added successfully.",
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/session/transactions"] });
+      // Silent success - no toast
       resetCounts();
       onOpenChange(false);
     },
@@ -90,6 +91,8 @@ export function DonationModal({ open, onOpenChange, sessionId }: DonationModalPr
   const resetCounts = () => {
     setCounts({});
     setPennies(0);
+    setPennyInputMode(false);
+    setPennyInput("");
   };
 
   const handleDone = async () => {
@@ -188,27 +191,84 @@ export function DonationModal({ open, onOpenChange, sessionId }: DonationModalPr
             </div>
           </div>
 
-          {/* Pennies Button */}
+          {/* Pennies Input */}
           <div>
-            <button
-              data-testid="button-denom-penny"
-              onClick={handlePenniesClick}
-              disabled={donationMutation.isPending}
-              className="relative w-full h-12 rounded-lg border-2 border-dashed border-border bg-muted/30 hover-elevate active-elevate-2 transition-all flex items-center justify-between px-4 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="text-sm font-medium text-muted-foreground">
-                Pennies (count later)
-              </span>
-              {pennies > 0 && (
-                <Badge
-                  data-testid="badge-count-penny"
-                  variant="secondary"
-                  className="h-6 px-2 font-semibold"
+            {pennyInputMode ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="Enter penny count"
+                    value={pennyInput}
+                    onChange={(e) => setPennyInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && pennyInput) {
+                        setPennies(parseInt(pennyInput) || 0);
+                        setPennyInput("");
+                        setPennyInputMode(false);
+                      }
+                    }}
+                    className="flex-1 h-12 text-base"
+                    autoFocus
+                  />
+                  <Button
+                    onClick={() => {
+                      if (pennyInput) {
+                        setPennies(parseInt(pennyInput) || 0);
+                        setPennyInput("");
+                      }
+                      setPennyInputMode(false);
+                    }}
+                    variant="default"
+                    className="h-12 px-6"
+                  >
+                    Set
+                  </Button>
+                </div>
+                <Button
+                  onClick={() => {
+                    setPennyInputMode(false);
+                    setPennyInput("");
+                  }}
+                  variant="ghost"
+                  className="w-full h-10 text-sm"
                 >
-                  {pennies}
-                </Badge>
-              )}
-            </button>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  data-testid="button-denom-penny"
+                  onClick={handlePenniesClick}
+                  disabled={donationMutation.isPending}
+                  className="relative flex-1 h-12 rounded-lg border-2 border-dashed border-border bg-muted/30 hover-elevate active-elevate-2 transition-all flex items-center justify-between px-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Pennies
+                  </span>
+                  {pennies > 0 && (
+                    <Badge
+                      data-testid="badge-count-penny"
+                      variant="secondary"
+                      className="h-6 px-2 font-semibold"
+                    >
+                      {pennies}
+                    </Badge>
+                  )}
+                </button>
+                <Button
+                  onClick={() => setPennyInputMode(true)}
+                  variant="outline"
+                  className="h-12 px-4 text-sm"
+                  disabled={donationMutation.isPending}
+                >
+                  Quick Entry
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Running Total */}
