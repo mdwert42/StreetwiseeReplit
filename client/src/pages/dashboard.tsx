@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Play, Square, Plus, DollarSign, Clock, TrendingUp } from "lucide-react";
+import { Play, Square, Plus, DollarSign, Clock, TrendingUp, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,25 +8,67 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { DonationModal } from "../components/donation-modal";
+import { TotalBreakdownModal } from "../components/total-breakdown-modal";
+import { GoalModal } from "../components/goal-modal";
+import { useSettings } from "@/contexts/settings-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Session } from "@shared/schema";
 
 export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTotalModalOpen, setIsTotalModalOpen] = useState(false);
+  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [location, setLocation] = useState("");
   const [isTestSession, setIsTestSession] = useState(false);
+  const [sessionDuration, setSessionDuration] = useState(0);
   const { toast } = useToast();
+  const { settings, updateSettings } = useSettings();
 
   // Fetch active session and total
   const { data: activeSession, isLoading: sessionLoading } = useQuery<Session | null>({
     queryKey: ["/api/session/active"],
   });
 
-  const { data: totalData, isLoading: totalLoading } = useQuery<{ total: number }>({
-    queryKey: ["/api/total"],
+  // Fetch totals for all timeframes
+  const { data: todayData } = useQuery<{ total: number }>({
+    queryKey: ["/api/total", "today"],
+    queryFn: async () => {
+      const response = await fetch("/api/total?timeframe=today");
+      return response.json();
+    },
   });
 
-  const total = totalData?.total ?? 0;
+  const { data: weekData } = useQuery<{ total: number }>({
+    queryKey: ["/api/total", "week"],
+    queryFn: async () => {
+      const response = await fetch("/api/total?timeframe=week");
+      return response.json();
+    },
+  });
+
+  const { data: monthData } = useQuery<{ total: number }>({
+    queryKey: ["/api/total", "month"],
+    queryFn: async () => {
+      const response = await fetch("/api/total?timeframe=month");
+      return response.json();
+    },
+  });
+
+  const { data: allTimeData, isLoading: totalLoading } = useQuery<{ total: number }>({
+    queryKey: ["/api/total", "all-time"],
+    queryFn: async () => {
+      const response = await fetch("/api/total?timeframe=all-time");
+      return response.json();
+    },
+  });
+
+  // Use the setting to determine which total to display
+  const displayTotal = 
+    settings.totalTimeframe === "today" ? (todayData?.total ?? 0) :
+    settings.totalTimeframe === "week" ? (weekData?.total ?? 0) :
+    settings.totalTimeframe === "month" ? (monthData?.total ?? 0) :
+    (allTimeData?.total ?? 0);
+
   const hasActiveSession = !!activeSession;
 
   // Start session mutation
@@ -123,11 +165,27 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-md px-4 py-6 space-y-6">
+      <div className="mx-auto max-w-md px-4 py-6 space-y-6 relative">
+        {/* Goal Button - Top Right Corner */}
+        <Button
+          onClick={() => setIsGoalModalOpen(true)}
+          variant={settings.dailyGoal ? "default" : "outline"}
+          size="icon"
+          className="absolute top-6 right-4 z-10 h-10 w-10 rounded-full"
+          title={settings.dailyGoal ? `Goal: $${settings.dailyGoal}` : "Set daily goal"}
+        >
+          <Target className="h-5 w-5" />
+        </Button>
+
         {/* Total Display - Large and Prominent */}
         <Card className="border-card-border">
           <CardContent className="p-6 text-center">
-            <p className="text-sm font-medium text-muted-foreground mb-2">Total Collected</p>
+            <p className="text-sm font-medium text-muted-foreground mb-2">
+              {settings.totalTimeframe === "today" ? "Today" :
+               settings.totalTimeframe === "week" ? "This Week" :
+               settings.totalTimeframe === "month" ? "This Month" :
+               "Total Collected"}
+            </p>
             {totalLoading ? (
               <div className="h-16 flex items-center justify-center">
                 <div className="text-4xl font-semibold text-muted-foreground animate-pulse">
@@ -135,9 +193,12 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
-              <div className="text-5xl md:text-6xl font-semibold text-foreground tracking-tight">
-                ${total.toFixed(2)}
-              </div>
+              <button
+                onClick={() => setIsTotalModalOpen(true)}
+                className="text-5xl md:text-6xl font-semibold text-foreground tracking-tight hover:text-primary transition-colors cursor-pointer"
+              >
+                ${displayTotal.toFixed(2)}
+              </button>
             )}
             {hasActiveSession && (
               <div className="mt-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -148,6 +209,11 @@ export default function Dashboard() {
             {hasActiveSession && activeSession.location && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Location: {activeSession.location}
+              </p>
+            )}
+            {!hasActiveSession && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Tap total to view breakdown
               </p>
             )}
           </CardContent>
@@ -300,6 +366,25 @@ export default function Dashboard() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         sessionId={activeSession?.id}
+      />
+
+      {/* Total Breakdown Modal */}
+      <TotalBreakdownModal
+        open={isTotalModalOpen}
+        onOpenChange={setIsTotalModalOpen}
+        todayTotal={todayData?.total ?? 0}
+        weekTotal={weekData?.total ?? 0}
+        monthTotal={monthData?.total ?? 0}
+        allTimeTotal={allTimeData?.total ?? 0}
+      />
+
+      {/* Goal Modal */}
+      <GoalModal
+        open={isGoalModalOpen}
+        onOpenChange={setIsGoalModalOpen}
+        currentTotal={todayData?.total ?? 0}
+        goal={settings.dailyGoal}
+        onSetGoal={(goal) => updateSettings({ dailyGoal: goal })}
       />
     </div>
   );

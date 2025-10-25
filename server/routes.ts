@@ -55,6 +55,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get total collected (excluding test sessions)
   app.get("/api/total", async (req, res) => {
     try {
+      const timeframe = req.query.timeframe as string | undefined;
       const sessions = await storage.getAllSessions();
       const transactions = await storage.getAllTransactions();
 
@@ -63,10 +64,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sessions.filter((s) => !s.isTest).map((s) => s.id)
       );
 
-      // Calculate total from transactions in non-test sessions
-      const total = transactions
-        .filter((t) => nonTestSessionIds.has(t.sessionId))
-        .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      // Filter transactions by timeframe if specified
+      let filteredTransactions = transactions.filter((t) => 
+        nonTestSessionIds.has(t.sessionId)
+      );
+
+      if (timeframe && timeframe !== "all-time") {
+        const now = new Date();
+        let cutoffDate: Date;
+
+        switch (timeframe) {
+          case "today":
+            cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+          case "week":
+            cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case "month":
+            cutoffDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+          default:
+            cutoffDate = new Date(0); // Beginning of time
+        }
+
+        filteredTransactions = filteredTransactions.filter((t) => 
+          new Date(t.timestamp) >= cutoffDate
+        );
+      }
+
+      // Calculate total from filtered transactions
+      const total = filteredTransactions.reduce(
+        (sum, t) => sum + parseFloat(t.amount), 
+        0
+      );
 
       res.json({ total });
     } catch (error) {
