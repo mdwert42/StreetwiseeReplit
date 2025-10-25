@@ -348,4 +348,17 @@ export class MemStorage implements IStorage {
 
 }
 
-export const storage = new MemStorage();
+// Export storage singleton - uses DB if DATABASE_URL is set, otherwise uses memory
+let storageInstance: IStorage;
+
+if (process.env.DATABASE_URL) {
+  console.log("Using PostgreSQL database storage");
+  // Lazy load to avoid import errors when DATABASE_URL isn't set
+  const { dbStorage } = await import("./db-storage");
+  storageInstance = dbStorage;
+} else {
+  console.log("Using in-memory JSON file storage (DATABASE_URL not set)");
+  storageInstance = new MemStorage();
+}
+
+export const storage = storageInstance;

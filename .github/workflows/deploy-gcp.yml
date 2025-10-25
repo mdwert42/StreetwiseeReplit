@@ -1,0 +1,68 @@
+name: Deploy to GCP
+
+on:
+  workflow_dispatch: # Manual trigger only
+  push:
+    branches:
+      - main # Only deploy from main branch
+
+jobs:
+  deploy:
+    name: Deploy to GCP Compute Engine
+    runs-on: ubuntu-latest
+    # Only run if DATABASE_URL secret is configured
+    if: ${{ secrets.DATABASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      # TODO: Add GCP deployment steps
+      # Uncomment and configure when ready to deploy
+      #
+      # - name: Authenticate to Google Cloud
+      #   uses: google-github-actions/auth@v2
+      #   with:
+      #     credentials_json: ${{ secrets.GCP_SA_KEY }}
+      #
+      # - name: Set up Cloud SDK
+      #   uses: google-github-actions/setup-gcloud@v2
+      #
+      # - name: Deploy to Compute Engine
+      #   run: |
+      #     # Copy files to GCP
+      #     gcloud compute scp --recurse dist/ ${{ secrets.GCP_INSTANCE }}:/app/dist --zone=${{ secrets.GCP_ZONE }}
+      #
+      #     # Restart service
+      #     gcloud compute ssh ${{ secrets.GCP_INSTANCE }} --zone=${{ secrets.GCP_ZONE }} --command="sudo systemctl restart streetwise"
+      #
+      # Required secrets:
+      # - DATABASE_URL: PostgreSQL connection string
+      # - GCP_SA_KEY: Service account JSON key
+      # - GCP_INSTANCE: Compute instance name
+      # - GCP_ZONE: GCP zone (e.g., us-central1-a)
+
+      - name: Deployment placeholder
+        run: |
+          echo "✅ Build successful!"
+          echo "Configure GCP deployment by:"
+          echo "1. Add GCP_SA_KEY secret (service account JSON)"
+          echo "2. Add GCP_INSTANCE secret (instance name)"
+          echo "3. Add GCP_ZONE secret (e.g., us-central1-a)"
+          echo "4. Uncomment deployment steps in this workflow"
