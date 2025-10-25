@@ -125,36 +125,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Record a product sale
-  app.post("/api/transaction/product", async (req, res) => {
-    try {
-      const validatedData = insertTransactionSchema.parse({
-        ...req.body,
-        type: "product",
-      });
-
-      // Validate session exists
-      const session = await storage.getSession(validatedData.sessionId);
-      if (!session) {
-        return res.status(404).json({ error: "Session not found" });
-      }
-
-      const transaction = await storage.createTransaction(validatedData);
-      res.json(transaction);
-    } catch (error) {
-      res.status(400).json({ error: "Failed to record product sale" });
-    }
-  });
-
-  // Get all products
-  app.get("/api/products", async (req, res) => {
-    try {
-      const products = await storage.getProducts();
-      res.json(products);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get products" });
-    }
-  });
 
   // Get all sessions (for future analytics)
   app.get("/api/sessions", async (req, res) => {

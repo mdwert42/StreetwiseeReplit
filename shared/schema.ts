@@ -24,13 +24,6 @@ export const transactions = pgTable("transactions", {
   pennies: integer("pennies").default(0), // count of pennies, optional
 });
 
-// Products table - extensible product catalog
-export const products = pgTable("products", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  isActive: boolean("is_active").notNull().default(true),
-});
 
 // Insert schemas - omit all server-managed fields
 export const insertSessionSchema = createInsertSchema(sessions).omit({
@@ -45,16 +38,9 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
   timestamp: true,
 });
 
-export const insertProductSchema = createInsertSchema(products).omit({
-  id: true,
-});
-
 // Types
 export type InsertSession = z.infer<typeof insertSessionSchema>;
 export type Session = typeof sessions.$inferSelect;
 
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type Transaction = typeof transactions.$inferSelect;
-
-export type InsertProduct = z.infer<typeof insertProductSchema>;
-export type Product = typeof products.$inferSelect;

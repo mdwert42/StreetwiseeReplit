@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Play, Square, Plus, DollarSign, Clock, TrendingUp, Target } from "lucide-react";
+import { Play, Square, Plus, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -119,30 +119,6 @@ export default function Dashboard() {
     },
   });
 
-  // Product sale mutation
-  const productSaleMutation = useMutation({
-    mutationFn: async ({ productId, amount }: { productId: string; amount: number }) => {
-      return await apiRequest("POST", "/api/transaction/product", {
-        sessionId: activeSession?.id,
-        amount: amount.toFixed(2),
-        productId,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/total"] });
-      toast({
-        title: "Product Sale Recorded",
-        description: "Sale added successfully.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to record product sale.",
-        variant: "destructive",
-      });
-    },
-  });
 
   const handleStartStop = async () => {
     if (hasActiveSession) {
@@ -153,15 +129,9 @@ export default function Dashboard() {
     }
   };
 
-  const handleProductSale = async (productId: string, amount: number) => {
-    if (!activeSession) return;
-    productSaleMutation.mutate({ productId, amount });
-  };
-
   const isProcessing =
     startSessionMutation.isPending ||
-    stopSessionMutation.isPending ||
-    productSaleMutation.isPending;
+    stopSessionMutation.isPending;
 
   return (
     <div className="min-h-screen bg-background">
@@ -286,61 +256,16 @@ export default function Dashboard() {
 
         {/* Action Buttons */}
         {hasActiveSession && (
-          <div className="space-y-4">
-            <Button
-              data-testid="button-record-donation"
-              onClick={() => setIsModalOpen(true)}
-              disabled={isProcessing}
-              className="w-full h-14 text-base font-semibold"
-              variant="default"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Record Donation
-            </Button>
-
-            {/* Product Buttons */}
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Quick Sales</p>
-              <div className="space-y-2">
-                <Button
-                  data-testid="button-product-1"
-                  onClick={() => handleProductSale("product-100", 1)}
-                  disabled={isProcessing}
-                  variant="outline"
-                  className="w-full h-12 justify-between text-base"
-                >
-                  <span className="font-semibold">Good Advice</span>
-                  <span className="flex items-center text-muted-foreground">
-                    <DollarSign className="w-4 h-4" />1.00
-                  </span>
-                </Button>
-                <Button
-                  data-testid="button-product-5"
-                  onClick={() => handleProductSale("product-500", 5)}
-                  disabled={isProcessing}
-                  variant="outline"
-                  className="w-full h-12 justify-between text-base"
-                >
-                  <span className="font-semibold">Bad Advice</span>
-                  <span className="flex items-center text-muted-foreground">
-                    <DollarSign className="w-4 h-4" />5.00
-                  </span>
-                </Button>
-                <Button
-                  data-testid="button-product-10"
-                  onClick={() => handleProductSale("product-1000", 10)}
-                  disabled={isProcessing}
-                  variant="outline"
-                  className="w-full h-12 justify-between text-base"
-                >
-                  <span className="font-semibold">Keychain</span>
-                  <span className="flex items-center text-muted-foreground">
-                    <DollarSign className="w-4 h-4" />10.00
-                  </span>
-                </Button>
-              </div>
-            </div>
-          </div>
+          <Button
+            data-testid="button-record-donation"
+            onClick={() => setIsModalOpen(true)}
+            disabled={isProcessing}
+            className="w-full h-14 text-base font-semibold"
+            variant="default"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Record Donation
+          </Button>
         )}
 
         {/* Empty State */}
