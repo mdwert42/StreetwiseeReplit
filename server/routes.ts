@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertSessionSchema, insertTransactionSchema } from "@shared/schema";
+import { insertSessionSchema, insertTransactionSchema, insertWorkTypeSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get active session
@@ -60,13 +60,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const transactions = await storage.getAllTransactions();
 
       // Filter out test sessions
-      const nonTestSessionIds = new Set(
-        sessions.filter((s) => !s.isTest).map((s) => s.id)
+      const testSessionIds = new Set(
+        sessions.filter((s) => s.isTest).map((s) => s.id)
       );
 
-      // Filter transactions by timeframe if specified
-      let filteredTransactions = transactions.filter((t) => 
-        nonTestSessionIds.has(t.sessionId)
+      // Filter transactions: include quick donations (no sessionId) and non-test session donations
+      let filteredTransactions = transactions.filter((t) =>
+        !t.sessionId || !testSessionIds.has(t.sessionId)
       );
 
       if (timeframe && timeframe !== "all-time") {
@@ -112,10 +112,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: "donation",
       });
 
-      // Validate session exists
-      const session = await storage.getSession(validatedData.sessionId);
-      if (!session) {
-        return res.status(404).json({ error: "Session not found" });
+      // Validate session exists if sessionId is provided
+      if (validatedData.sessionId) {
+        const session = await storage.getSession(validatedData.sessionId);
+        if (!session) {
+          return res.status(404).json({ error: "Session not found" });
+        }
       }
 
       const transaction = await storage.createTransaction(validatedData);
@@ -144,6 +146,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(transactions);
     } catch (error) {
       res.status(500).json({ error: "Failed to get transactions" });
+    }
+  });
+
+  // Work Type endpoints
+  // Get all work types for current user
+  app.get("/api/work-types", async (req, res) => {
+    try {
+      const { userId, orgId } = req.query;
+
+      let workTypes;
+      if (orgId) {
+        workTypes = await storage.getWorkTypesByOrg(orgId as string);
+      } else if (userId) {
+        workTypes = await storage.getWorkTypesByUser(userId as string);
+      } else {
+        return res.status(400).json({ error: "userId or orgId required" });
+      }
+
+      res.json(workTypes);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get work types" });
+    }
+  });
+
+  // Create a new work type
+  app.post("/api/work-types", async (req, res) => {
+    try {
+      const validatedData = insertWorkTypeSchema.parse(req.body);
+      const workType = await storage.createWorkType(validatedData);
+      res.json(workType);
+    } catch (error) {
+      res.status(400).json({ error: "Failed to create work type" });
+    }
+  });
+
+  // Update a work type
+  app.put("/api/work-types/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const workType = await storage.getWorkType(id);
+
+      if (!workType) {
+        return res.status(404).json({ error: "Work type not found" });
+      }
+
+      const updated = await storage.updateWorkType(id, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ error: "Failed to update work type" });
+    }
+  });
+
+  // Delete a work type (soft delete)
+  app.delete("/api/work-types/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const workType = await storage.getWorkType(id);
+
+      if (!workType) {
+        return res.status(404).json({ error: "Work type not found" });
+      }
+
+      await storage.deleteWorkType(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete work type" });
+    }
+  });
+
+  // Quick donation (without session)
+  app.post("/api/transaction/quick-donation", async (req, res) => {
+    try {
+      const validatedData = insertTransactionSchema.parse({
+        ...req.body,
+        type: "donation",
+        sessionId: null, // Quick donations have no session
+      });
+
+      const transaction = await storage.createTransaction(validatedData);
+      res.json(transaction);
+    } catch (error) {
+      res.status(400).json({ error: "Failed to record quick donation" });
     }
   });
 
