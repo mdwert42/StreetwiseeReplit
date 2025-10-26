@@ -176,7 +176,14 @@ export class DbStorage implements IStorage {
   }
 
   async createSession(insertSession: InsertSession): Promise<Session> {
-    const [session] = await db.insert(sessions).values(insertSession).returning();
+    const values: any = {
+      location: insertSession.location,
+      isTest: insertSession.isTest,
+      orgId: insertSession.orgId ?? null,
+      userId: insertSession.userId ?? null,
+      workTypeId: insertSession.workTypeId ?? null,
+    };
+    const [session] = await db.insert(sessions).values(values).returning();
     return session;
   }
 
@@ -219,7 +226,18 @@ export class DbStorage implements IStorage {
 
   // Transaction methods
   async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
-    const [transaction] = await db.insert(transactions).values(insertTransaction).returning();
+    const values: any = {
+      type: insertTransaction.type,
+      amount: insertTransaction.amount,
+      sessionId: insertTransaction.sessionId ?? null,
+      userId: insertTransaction.userId ?? null,
+      orgId: insertTransaction.orgId ?? null,
+      workTypeId: insertTransaction.workTypeId ?? null,
+      note: insertTransaction.note ?? null,
+      productId: insertTransaction.productId ?? null,
+      pennies: insertTransaction.pennies ?? null,
+    };
+    const [transaction] = await db.insert(transactions).values(values).returning();
     return transaction;
   }
 

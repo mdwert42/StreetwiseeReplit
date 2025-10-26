@@ -188,13 +188,14 @@ export class MemStorage implements IStorage {
   async createOrganization(insertOrg: InsertOrganization): Promise<Organization> {
     const id = randomUUID();
     const org: Organization = {
-      ...insertOrg,
       id,
-      createdAt: new Date(),
-      isActive: insertOrg.isActive ?? true,
+      name: insertOrg.name,
       tier: insertOrg.tier ?? "free",
       features: insertOrg.features ?? {},
+      subdomain: insertOrg.subdomain ?? null,
       branding: insertOrg.branding ?? {},
+      createdAt: new Date(),
+      isActive: insertOrg.isActive ?? true,
     };
     this.organizations.set(id, org);
     await this.saveData();
@@ -250,10 +251,13 @@ export class MemStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
     const user: User = {
-      ...insertUser,
       id,
       createdAt: new Date(),
       isActive: insertUser.isActive ?? true,
+      orgId: insertUser.orgId ?? null,
+      caseworkerId: insertUser.caseworkerId ?? null,
+      pin: insertUser.pin ?? null,
+      deviceId: insertUser.deviceId ?? null,
     };
     this.users.set(id, user);
     await this.saveData();
@@ -282,10 +286,14 @@ export class MemStorage implements IStorage {
   async createWorkType(insertWorkType: InsertWorkType): Promise<WorkType> {
     const id = randomUUID();
     const workType: WorkType = {
-      ...insertWorkType,
       id,
+      color: insertWorkType.color ?? null,
+      name: insertWorkType.name,
+      icon: insertWorkType.icon ?? null,
       createdAt: new Date(),
       isActive: insertWorkType.isActive ?? true,
+      orgId: insertWorkType.orgId ?? null,
+      userId: insertWorkType.userId ?? null,
       isDefault: insertWorkType.isDefault ?? false,
       sortOrder: insertWorkType.sortOrder ?? 0,
     };
@@ -355,6 +363,9 @@ export class MemStorage implements IStorage {
       endTime: null,
       isActive: true,
       isTest: insertSession.isTest ?? false,
+      orgId: insertSession.orgId ?? null,
+      userId: insertSession.userId ?? null,
+      workTypeId: insertSession.workTypeId ?? null,
     };
     this.sessions.set(id, session);
     await this.saveData();
@@ -390,13 +401,17 @@ export class MemStorage implements IStorage {
   async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
     const id = randomUUID();
     const transaction: Transaction = {
-      ...insertTransaction,
+      type: insertTransaction.type,
       id,
-      timestamp: new Date(),
-      pennies: insertTransaction.pennies ?? 0,
-      productId: insertTransaction.productId ?? null,
-      userId: insertTransaction.userId ?? null,
+      note: insertTransaction.note ?? null,
+      sessionId: insertTransaction.sessionId ?? null,
+      pennies: insertTransaction.pennies ?? null,
+      amount: insertTransaction.amount,
       orgId: insertTransaction.orgId ?? null,
+      userId: insertTransaction.userId ?? null,
+      workTypeId: insertTransaction.workTypeId ?? null,
+      timestamp: new Date(),
+      productId: insertTransaction.productId ?? null,
     };
     this.transactions.set(id, transaction);
     await this.saveData();
