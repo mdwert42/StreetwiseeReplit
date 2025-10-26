@@ -4,6 +4,7 @@ import {
   organizations,
   caseworkers,
   users,
+  workTypes,
   sessions,
   transactions,
   type Organization,
@@ -12,6 +13,8 @@ import {
   type InsertCaseworker,
   type User,
   type InsertUser,
+  type WorkType,
+  type InsertWorkType,
   type Session,
   type InsertSession,
   type Transaction,
@@ -101,6 +104,49 @@ export class DbStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user;
+  }
+
+  // Work Type methods
+  async createWorkType(insertWorkType: InsertWorkType): Promise<WorkType> {
+    const [workType] = await db.insert(workTypes).values(insertWorkType).returning();
+    return workType;
+  }
+
+  async getWorkType(id: string): Promise<WorkType | undefined> {
+    const [workType] = await db.select().from(workTypes).where(eq(workTypes.id, id));
+    return workType;
+  }
+
+  async getWorkTypesByUser(userId: string): Promise<WorkType[]> {
+    return await db
+      .select()
+      .from(workTypes)
+      .where(and(eq(workTypes.userId, userId), eq(workTypes.isActive, true)))
+      .orderBy(workTypes.sortOrder);
+  }
+
+  async getWorkTypesByOrg(orgId: string): Promise<WorkType[]> {
+    return await db
+      .select()
+      .from(workTypes)
+      .where(and(eq(workTypes.orgId, orgId), eq(workTypes.isActive, true)))
+      .orderBy(workTypes.sortOrder);
+  }
+
+  async updateWorkType(id: string, updates: Partial<WorkType>): Promise<WorkType | undefined> {
+    const [workType] = await db
+      .update(workTypes)
+      .set(updates)
+      .where(eq(workTypes.id, id))
+      .returning();
+    return workType;
+  }
+
+  async deleteWorkType(id: string): Promise<void> {
+    await db
+      .update(workTypes)
+      .set({ isActive: false })
+      .where(eq(workTypes.id, id));
   }
 
   // Session methods

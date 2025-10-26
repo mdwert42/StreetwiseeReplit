@@ -9,6 +9,8 @@ import {
   type InsertCaseworker,
   type User,
   type InsertUser,
+  type WorkType,
+  type InsertWorkType,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import fs from "fs/promises";
@@ -33,6 +35,14 @@ export interface IStorage {
   getUsersByOrg(orgId: string | null): Promise<User[]>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
 
+  // Work Type methods
+  createWorkType(workType: InsertWorkType): Promise<WorkType>;
+  getWorkType(id: string): Promise<WorkType | undefined>;
+  getWorkTypesByUser(userId: string): Promise<WorkType[]>;
+  getWorkTypesByOrg(orgId: string): Promise<WorkType[]>;
+  updateWorkType(id: string, updates: Partial<WorkType>): Promise<WorkType | undefined>;
+  deleteWorkType(id: string): Promise<void>;
+
   // Session methods (updated for multi-tenancy)
   getActiveSession(userId?: string, orgId?: string | null): Promise<Session | undefined>;
   createSession(session: InsertSession): Promise<Session>;
@@ -50,6 +60,7 @@ interface StorageData {
   organizations: Record<string, Organization>;
   caseworkers: Record<string, Caseworker>;
   users: Record<string, User>;
+  workTypes: Record<string, WorkType>;
   sessions: Record<string, Session>;
   transactions: Record<string, Transaction>;
 }
@@ -58,6 +69,7 @@ export class MemStorage implements IStorage {
   private organizations: Map<string, Organization>;
   private caseworkers: Map<string, Caseworker>;
   private users: Map<string, User>;
+  private workTypes: Map<string, WorkType>;
   private sessions: Map<string, Session>;
   private transactions: Map<string, Transaction>;
   private dataFile: string;
@@ -67,6 +79,7 @@ export class MemStorage implements IStorage {
     this.organizations = new Map();
     this.caseworkers = new Map();
     this.users = new Map();
+    this.workTypes = new Map();
     this.sessions = new Map();
     this.transactions = new Map();
 
@@ -106,6 +119,14 @@ export class MemStorage implements IStorage {
         });
       });
 
+      // Restore work types
+      Object.entries(parsed.workTypes || {}).forEach(([id, workType]) => {
+        this.workTypes.set(id, {
+          ...workType,
+          createdAt: new Date(workType.createdAt),
+        });
+      });
+
       // Restore sessions with Date objects
       Object.entries(parsed.sessions || {}).forEach(([id, session]) => {
         this.sessions.set(id, {
@@ -125,7 +146,8 @@ export class MemStorage implements IStorage {
 
       console.log(
         `Loaded ${this.organizations.size} orgs, ${this.caseworkers.size} caseworkers, ` +
-        `${this.users.size} users, ${this.sessions.size} sessions, ${this.transactions.size} transactions`
+        `${this.users.size} users, ${this.workTypes.size} work types, ` +
+        `${this.sessions.size} sessions, ${this.transactions.size} transactions`
       );
     } catch (error: any) {
       if (error.code === "ENOENT") {
@@ -148,6 +170,7 @@ export class MemStorage implements IStorage {
           organizations: Object.fromEntries(this.organizations),
           caseworkers: Object.fromEntries(this.caseworkers),
           users: Object.fromEntries(this.users),
+          workTypes: Object.fromEntries(this.workTypes),
           sessions: Object.fromEntries(this.sessions),
           transactions: Object.fromEntries(this.transactions),
         };
@@ -253,6 +276,57 @@ export class MemStorage implements IStorage {
     this.users.set(id, updatedUser);
     await this.saveData();
     return updatedUser;
+  }
+
+  // Work Type methods
+  async createWorkType(insertWorkType: InsertWorkType): Promise<WorkType> {
+    const id = randomUUID();
+    const workType: WorkType = {
+      ...insertWorkType,
+      id,
+      createdAt: new Date(),
+      isActive: insertWorkType.isActive ?? true,
+      isDefault: insertWorkType.isDefault ?? false,
+      sortOrder: insertWorkType.sortOrder ?? 0,
+    };
+    this.workTypes.set(id, workType);
+    await this.saveData();
+    return workType;
+  }
+
+  async getWorkType(id: string): Promise<WorkType | undefined> {
+    return this.workTypes.get(id);
+  }
+
+  async getWorkTypesByUser(userId: string): Promise<WorkType[]> {
+    return Array.from(this.workTypes.values())
+      .filter((wt) => wt.userId === userId && wt.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  async getWorkTypesByOrg(orgId: string): Promise<WorkType[]> {
+    return Array.from(this.workTypes.values())
+      .filter((wt) => wt.orgId === orgId && wt.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  async updateWorkType(id: string, updates: Partial<WorkType>): Promise<WorkType | undefined> {
+    const workType = this.workTypes.get(id);
+    if (!workType) return undefined;
+
+    const updatedWorkType = { ...workType, ...updates };
+    this.workTypes.set(id, updatedWorkType);
+    await this.saveData();
+    return updatedWorkType;
+  }
+
+  async deleteWorkType(id: string): Promise<void> {
+    const workType = this.workTypes.get(id);
+    if (workType) {
+      workType.isActive = false;
+      this.workTypes.set(id, workType);
+      await this.saveData();
+    }
   }
 
   // Session methods

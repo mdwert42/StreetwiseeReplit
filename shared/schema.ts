@@ -38,11 +38,26 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").notNull().default(true),
 });
 
+// Work Types table - user-configurable income categories
+export const workTypes = pgTable("work_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }), // Nullable for org work types
+  orgId: varchar("org_id").references(() => organizations.id, { onDelete: "cascade" }), // Nullable for free tier
+  name: text("name").notNull(), // "Panhandling", "UberEats", etc
+  icon: text("icon"), // Optional emoji/icon
+  color: text("color"), // Optional color hex code for UI
+  isDefault: boolean("is_default").notNull().default(false), // Default selection in dropdown
+  sortOrder: integer("sort_order").notNull().default(0), // Display order
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
 // Sessions table - tracks collection periods with location and test flag
 export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }), // Nullable for backward compatibility
   orgId: varchar("org_id").references(() => organizations.id, { onDelete: "cascade" }), // Nullable - free tier sessions have no org
+  workTypeId: varchar("work_type_id").references(() => workTypes.id, { onDelete: "set null" }), // What type of work
   location: text("location").notNull(),
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time"),
@@ -53,12 +68,14 @@ export const sessions = pgTable("sessions", {
 // Transactions table - records all donations and product sales with timestamps
 export const transactions = pgTable("transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  sessionId: varchar("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id").references(() => sessions.id, { onDelete: "cascade" }), // NOW NULLABLE - quick donations have no session
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }), // Nullable for backward compatibility
   orgId: varchar("org_id").references(() => organizations.id, { onDelete: "cascade" }), // Nullable - free tier has no org
+  workTypeId: varchar("work_type_id").references(() => workTypes.id, { onDelete: "set null" }), // Denormalized for easy filtering
   timestamp: timestamp("timestamp").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   type: text("type").notNull(), // 'donation' or 'product'
+  note: text("note"), // Optional note ("Friend gave me $20")
   productId: varchar("product_id"), // nullable, only for product sales
   pennies: integer("pennies").default(0), // count of pennies, optional
 });
@@ -76,6 +93,11 @@ export const insertCaseworkerSchema = createInsertSchema(caseworkers).omit({
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWorkTypeSchema = createInsertSchema(workTypes).omit({
   id: true,
   createdAt: true,
 });
@@ -101,6 +123,9 @@ export type Caseworker = typeof caseworkers.$inferSelect;
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export type InsertWorkType = z.infer<typeof insertWorkTypeSchema>;
+export type WorkType = typeof workTypes.$inferSelect;
 
 export type InsertSession = z.infer<typeof insertSessionSchema>;
 export type Session = typeof sessions.$inferSelect;

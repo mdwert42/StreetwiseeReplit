@@ -5,7 +5,7 @@
  */
 
 import { MemStorage } from "./storage";
-import type { InsertOrganization, InsertCaseworker, InsertUser, InsertSession, InsertTransaction } from "@shared/schema";
+import type { InsertOrganization, InsertCaseworker, InsertUser, InsertWorkType, InsertSession, InsertTransaction } from "@shared/schema";
 
 // Simple test framework
 let testsPassed = 0;
@@ -398,6 +398,241 @@ async function runTests() {
     assertEqual(org2Txns.length, 1, "Org 2 should have 1 transaction");
     assertEqual(freeTxns.length, 1, "Free tier should have 1 transaction");
     assertEqual(allTxns.length, 4, "Should have 4 total transactions");
+  });
+
+  // Work Types
+  await test("should create a work type for a user", async () => {
+    const storage = new MemStorage();
+    const user = await storage.createUser({ pin: "hash", deviceId: "device1" });
+
+    const workType = await storage.createWorkType({
+      userId: user.id,
+      name: "Panhandling",
+      icon: "💰",
+      color: "#4ade80",
+      sortOrder: 0,
+    });
+
+    assert(!!workType.id, "Work type should have an ID");
+    assertEqual(workType.name, "Panhandling", "Work type name should match");
+    assertEqual(workType.icon, "💰", "Work type icon should match");
+    assertEqual(workType.color, "#4ade80", "Work type color should match");
+    assertEqual(workType.sortOrder, 0, "Sort order should match");
+    assert(workType.isActive === true, "Work type should be active");
+  });
+
+  await test("should create a work type for an org", async () => {
+    const storage = new MemStorage();
+    const org = await storage.createOrganization({ name: "Test Org", tier: "basic" });
+
+    const workType = await storage.createWorkType({
+      orgId: org.id,
+      name: "Food Delivery",
+      icon: "🚚",
+      color: "#3b82f6",
+      sortOrder: 1,
+    });
+
+    assertEqual(workType.orgId, org.id, "Org ID should match");
+    assertEqual(workType.name, "Food Delivery", "Work type name should match");
+  });
+
+  await test("should get work type by id", async () => {
+    const storage = new MemStorage();
+    const user = await storage.createUser({ pin: "hash", deviceId: "device1" });
+    const created = await storage.createWorkType({
+      userId: user.id,
+      name: "Street Performance",
+    });
+
+    const retrieved = await storage.getWorkType(created.id);
+
+    assert(retrieved !== undefined, "Work type should be retrieved");
+    assertEqual(retrieved?.id, created.id, "IDs should match");
+    assertEqual(retrieved?.name, "Street Performance", "Name should match");
+  });
+
+  await test("should get work types by user, sorted by sortOrder", async () => {
+    const storage = new MemStorage();
+    const user = await storage.createUser({ pin: "hash", deviceId: "device1" });
+
+    // Create work types in non-sorted order
+    await storage.createWorkType({
+      userId: user.id,
+      name: "C Work",
+      sortOrder: 2,
+    });
+
+    await storage.createWorkType({
+      userId: user.id,
+      name: "A Work",
+      sortOrder: 0,
+    });
+
+    await storage.createWorkType({
+      userId: user.id,
+      name: "B Work",
+      sortOrder: 1,
+    });
+
+    const workTypes = await storage.getWorkTypesByUser(user.id);
+
+    assertEqual(workTypes.length, 3, "Should have 3 work types");
+    assertEqual(workTypes[0].name, "A Work", "First should be A Work (sortOrder 0)");
+    assertEqual(workTypes[1].name, "B Work", "Second should be B Work (sortOrder 1)");
+    assertEqual(workTypes[2].name, "C Work", "Third should be C Work (sortOrder 2)");
+  });
+
+  await test("should get work types by org, sorted by sortOrder", async () => {
+    const storage = new MemStorage();
+    const org = await storage.createOrganization({ name: "Test Org", tier: "basic" });
+
+    await storage.createWorkType({
+      orgId: org.id,
+      name: "Task 3",
+      sortOrder: 2,
+    });
+
+    await storage.createWorkType({
+      orgId: org.id,
+      name: "Task 1",
+      sortOrder: 0,
+    });
+
+    await storage.createWorkType({
+      orgId: org.id,
+      name: "Task 2",
+      sortOrder: 1,
+    });
+
+    const workTypes = await storage.getWorkTypesByOrg(org.id);
+
+    assertEqual(workTypes.length, 3, "Should have 3 work types");
+    assertEqual(workTypes[0].name, "Task 1", "First should be Task 1");
+    assertEqual(workTypes[1].name, "Task 2", "Second should be Task 2");
+    assertEqual(workTypes[2].name, "Task 3", "Third should be Task 3");
+  });
+
+  await test("should update work type", async () => {
+    const storage = new MemStorage();
+    const user = await storage.createUser({ pin: "hash", deviceId: "device1" });
+    const workType = await storage.createWorkType({
+      userId: user.id,
+      name: "Old Name",
+      sortOrder: 0,
+    });
+
+    const updated = await storage.updateWorkType(workType.id, {
+      name: "New Name",
+      icon: "⭐",
+      sortOrder: 5,
+    });
+
+    assertEqual(updated?.name, "New Name", "Name should be updated");
+    assertEqual(updated?.icon, "⭐", "Icon should be updated");
+    assertEqual(updated?.sortOrder, 5, "Sort order should be updated");
+  });
+
+  await test("should soft delete work type (set isActive=false)", async () => {
+    const storage = new MemStorage();
+    const user = await storage.createUser({ pin: "hash", deviceId: "device1" });
+    const workType = await storage.createWorkType({
+      userId: user.id,
+      name: "To Delete",
+      sortOrder: 0,
+    });
+
+    // Verify it exists before deletion
+    const beforeDelete = await storage.getWorkType(workType.id);
+    assert(beforeDelete?.isActive === true, "Work type should be active before deletion");
+
+    // Delete it
+    await storage.deleteWorkType(workType.id);
+
+    // Verify it's soft deleted
+    const afterDelete = await storage.getWorkType(workType.id);
+    assert(afterDelete?.isActive === false, "Work type should be inactive after deletion");
+  });
+
+  await test("should not return deleted work types in getWorkTypesByUser", async () => {
+    const storage = new MemStorage();
+    const user = await storage.createUser({ pin: "hash", deviceId: "device1" });
+
+    const wt1 = await storage.createWorkType({
+      userId: user.id,
+      name: "Active Work",
+      sortOrder: 0,
+    });
+
+    const wt2 = await storage.createWorkType({
+      userId: user.id,
+      name: "To Delete",
+      sortOrder: 1,
+    });
+
+    // Verify both exist initially
+    let workTypes = await storage.getWorkTypesByUser(user.id);
+    assertEqual(workTypes.length, 2, "Should have 2 work types initially");
+
+    // Delete one
+    await storage.deleteWorkType(wt2.id);
+
+    // Verify only active one is returned
+    workTypes = await storage.getWorkTypesByUser(user.id);
+    assertEqual(workTypes.length, 1, "Should have 1 active work type");
+    assertEqual(workTypes[0].name, "Active Work", "Should return only active work type");
+  });
+
+  await test("should filter work types by user (not return another user's types)", async () => {
+    const storage = new MemStorage();
+    const user1 = await storage.createUser({ pin: "hash1", deviceId: "device1" });
+    const user2 = await storage.createUser({ pin: "hash2", deviceId: "device2" });
+
+    await storage.createWorkType({
+      userId: user1.id,
+      name: "User 1 Work",
+      sortOrder: 0,
+    });
+
+    await storage.createWorkType({
+      userId: user2.id,
+      name: "User 2 Work",
+      sortOrder: 0,
+    });
+
+    const user1Types = await storage.getWorkTypesByUser(user1.id);
+    const user2Types = await storage.getWorkTypesByUser(user2.id);
+
+    assertEqual(user1Types.length, 1, "User 1 should have 1 work type");
+    assertEqual(user2Types.length, 1, "User 2 should have 1 work type");
+    assertEqual(user1Types[0].name, "User 1 Work", "User 1 type should match");
+    assertEqual(user2Types[0].name, "User 2 Work", "User 2 type should match");
+  });
+
+  await test("should filter work types by org (not return another org's types)", async () => {
+    const storage = new MemStorage();
+    const org1 = await storage.createOrganization({ name: "Org 1", tier: "basic" });
+    const org2 = await storage.createOrganization({ name: "Org 2", tier: "basic" });
+
+    await storage.createWorkType({
+      orgId: org1.id,
+      name: "Org 1 Work",
+      sortOrder: 0,
+    });
+
+    await storage.createWorkType({
+      orgId: org2.id,
+      name: "Org 2 Work",
+      sortOrder: 0,
+    });
+
+    const org1Types = await storage.getWorkTypesByOrg(org1.id);
+    const org2Types = await storage.getWorkTypesByOrg(org2.id);
+
+    assertEqual(org1Types.length, 1, "Org 1 should have 1 work type");
+    assertEqual(org2Types.length, 1, "Org 2 should have 1 work type");
+    assertEqual(org1Types[0].name, "Org 1 Work", "Org 1 type should match");
+    assertEqual(org2Types[0].name, "Org 2 Work", "Org 2 type should match");
   });
 
   // Data Isolation
