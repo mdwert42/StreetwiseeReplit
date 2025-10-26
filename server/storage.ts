@@ -3,68 +3,130 @@ import {
   type InsertSession,
   type Transaction,
   type InsertTransaction,
-  type Product,
-  type InsertProduct,
+  type Organization,
+  type InsertOrganization,
+  type Caseworker,
+  type InsertCaseworker,
+  type User,
+  type InsertUser,
+  type WorkType,
+  type InsertWorkType,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import fs from "fs/promises";
 import path from "path";
 
 export interface IStorage {
-  // Session methods
-  getActiveSession(): Promise<Session | undefined>;
+  // Organization methods
+  createOrganization(org: InsertOrganization): Promise<Organization>;
+  getOrganization(id: string): Promise<Organization | undefined>;
+  getAllOrganizations(): Promise<Organization[]>;
+  updateOrganization(id: string, updates: Partial<Organization>): Promise<Organization | undefined>;
+
+  // Caseworker methods
+  createCaseworker(caseworker: InsertCaseworker): Promise<Caseworker>;
+  getCaseworker(id: string): Promise<Caseworker | undefined>;
+  getCaseworkerByEmail(email: string): Promise<Caseworker | undefined>;
+  getCaseworkersByOrg(orgId: string): Promise<Caseworker[]>;
+
+  // User methods
+  createUser(user: InsertUser): Promise<User>;
+  getUser(id: string): Promise<User | undefined>;
+  getUsersByOrg(orgId: string | null): Promise<User[]>;
+  updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+
+  // Work Type methods
+  createWorkType(workType: InsertWorkType): Promise<WorkType>;
+  getWorkType(id: string): Promise<WorkType | undefined>;
+  getWorkTypesByUser(userId: string): Promise<WorkType[]>;
+  getWorkTypesByOrg(orgId: string): Promise<WorkType[]>;
+  updateWorkType(id: string, updates: Partial<WorkType>): Promise<WorkType | undefined>;
+  deleteWorkType(id: string): Promise<void>;
+
+  // Session methods (updated for multi-tenancy)
+  getActiveSession(userId?: string, orgId?: string | null): Promise<Session | undefined>;
   createSession(session: InsertSession): Promise<Session>;
   updateSession(id: string, updates: Partial<Session>): Promise<Session | undefined>;
   getSession(id: string): Promise<Session | undefined>;
-  getAllSessions(): Promise<Session[]>;
+  getAllSessions(orgId?: string | null): Promise<Session[]>;
 
-  // Transaction methods
+  // Transaction methods (updated for multi-tenancy)
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   getTransactionsBySession(sessionId: string): Promise<Transaction[]>;
-  getAllTransactions(): Promise<Transaction[]>;
-
-  // Product methods
-  getProducts(): Promise<Product[]>;
-  getProduct(id: string): Promise<Product | undefined>;
-  createProduct(product: InsertProduct): Promise<Product>;
+  getAllTransactions(orgId?: string | null): Promise<Transaction[]>;
 }
 
 interface StorageData {
+  organizations: Record<string, Organization>;
+  caseworkers: Record<string, Caseworker>;
+  users: Record<string, User>;
+  workTypes: Record<string, WorkType>;
   sessions: Record<string, Session>;
   transactions: Record<string, Transaction>;
-  products: Record<string, Product>;
 }
 
 export class MemStorage implements IStorage {
+  private organizations: Map<string, Organization>;
+  private caseworkers: Map<string, Caseworker>;
+  private users: Map<string, User>;
+  private workTypes: Map<string, WorkType>;
   private sessions: Map<string, Session>;
   private transactions: Map<string, Transaction>;
-  private products: Map<string, Product>;
   private dataFile: string;
   private saveTimeout: NodeJS.Timeout | null = null;
 
   constructor() {
+    this.organizations = new Map();
+    this.caseworkers = new Map();
+    this.users = new Map();
+    this.workTypes = new Map();
     this.sessions = new Map();
     this.transactions = new Map();
-    this.products = new Map();
-    
+
     // Store data in the server directory
     this.dataFile = path.join(process.cwd(), "streetwise-data.json");
-    
-    // Load existing data, then initialize products
-    this.loadData().then(() => {
-      // Only initialize products if none exist
-      if (this.products.size === 0) {
-        this.initializeProducts();
-        this.saveData(); // Save the initial products
-      }
-    });
+
+    // Load existing data
+    this.loadData();
   }
 
   private async loadData(): Promise<void> {
     try {
       const data = await fs.readFile(this.dataFile, "utf-8");
       const parsed: StorageData = JSON.parse(data);
-      
+
+      // Restore organizations
+      Object.entries(parsed.organizations || {}).forEach(([id, org]) => {
+        this.organizations.set(id, {
+          ...org,
+          createdAt: new Date(org.createdAt),
+        });
+      });
+
+      // Restore caseworkers
+      Object.entries(parsed.caseworkers || {}).forEach(([id, caseworker]) => {
+        this.caseworkers.set(id, {
+          ...caseworker,
+          createdAt: new Date(caseworker.createdAt),
+        });
+      });
+
+      // Restore users
+      Object.entries(parsed.users || {}).forEach(([id, user]) => {
+        this.users.set(id, {
+          ...user,
+          createdAt: new Date(user.createdAt),
+        });
+      });
+
+      // Restore work types
+      Object.entries(parsed.workTypes || {}).forEach(([id, workType]) => {
+        this.workTypes.set(id, {
+          ...workType,
+          createdAt: new Date(workType.createdAt),
+        });
+      });
+
       // Restore sessions with Date objects
       Object.entries(parsed.sessions || {}).forEach(([id, session]) => {
         this.sessions.set(id, {
@@ -73,7 +135,7 @@ export class MemStorage implements IStorage {
           endTime: session.endTime ? new Date(session.endTime) : null,
         });
       });
-      
+
       // Restore transactions with Date objects
       Object.entries(parsed.transactions || {}).forEach(([id, transaction]) => {
         this.transactions.set(id, {
@@ -81,13 +143,12 @@ export class MemStorage implements IStorage {
           timestamp: new Date(transaction.timestamp),
         });
       });
-      
-      // Restore products
-      Object.entries(parsed.products || {}).forEach(([id, product]) => {
-        this.products.set(id, product);
-      });
-      
-      console.log(`Loaded ${this.sessions.size} sessions, ${this.transactions.size} transactions, ${this.products.size} products`);
+
+      console.log(
+        `Loaded ${this.organizations.size} orgs, ${this.caseworkers.size} caseworkers, ` +
+        `${this.users.size} users, ${this.workTypes.size} work types, ` +
+        `${this.sessions.size} sessions, ${this.transactions.size} transactions`
+      );
     } catch (error: any) {
       if (error.code === "ENOENT") {
         console.log("No existing data file, starting fresh");
@@ -102,15 +163,18 @@ export class MemStorage implements IStorage {
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
     }
-    
+
     this.saveTimeout = setTimeout(async () => {
       try {
         const data: StorageData = {
+          organizations: Object.fromEntries(this.organizations),
+          caseworkers: Object.fromEntries(this.caseworkers),
+          users: Object.fromEntries(this.users),
+          workTypes: Object.fromEntries(this.workTypes),
           sessions: Object.fromEntries(this.sessions),
           transactions: Object.fromEntries(this.transactions),
-          products: Object.fromEntries(this.products),
         };
-        
+
         await fs.writeFile(this.dataFile, JSON.stringify(data, null, 2), "utf-8");
         console.log("Data saved to disk");
       } catch (error) {
@@ -119,27 +183,175 @@ export class MemStorage implements IStorage {
     }, 500); // Wait 500ms before actually saving
   }
 
-  private initializeProducts() {
-    const defaultProducts: InsertProduct[] = [
-      { name: "Product $1", price: "1.00", isActive: true },
-      { name: "Product $5", price: "5.00", isActive: true },
-      { name: "Product $10", price: "10.00", isActive: true },
-    ];
 
-    defaultProducts.forEach((product) => {
-      const id = `product-${product.price.replace(".", "")}`;
-      const newProduct: Product = { 
-        ...product, 
-        id,
-        isActive: product.isActive ?? true,
-      };
-      this.products.set(id, newProduct);
-    });
+  // Organization methods
+  async createOrganization(insertOrg: InsertOrganization): Promise<Organization> {
+    const id = randomUUID();
+    const org: Organization = {
+      id,
+      name: insertOrg.name,
+      tier: insertOrg.tier ?? "free",
+      features: insertOrg.features ?? {},
+      subdomain: insertOrg.subdomain ?? null,
+      branding: insertOrg.branding ?? {},
+      createdAt: new Date(),
+      isActive: insertOrg.isActive ?? true,
+    };
+    this.organizations.set(id, org);
+    await this.saveData();
+    return org;
+  }
+
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    return this.organizations.get(id);
+  }
+
+  async getAllOrganizations(): Promise<Organization[]> {
+    return Array.from(this.organizations.values());
+  }
+
+  async updateOrganization(id: string, updates: Partial<Organization>): Promise<Organization | undefined> {
+    const org = this.organizations.get(id);
+    if (!org) return undefined;
+
+    const updatedOrg = { ...org, ...updates };
+    this.organizations.set(id, updatedOrg);
+    await this.saveData();
+    return updatedOrg;
+  }
+
+  // Caseworker methods
+  async createCaseworker(insertCaseworker: InsertCaseworker): Promise<Caseworker> {
+    const id = randomUUID();
+    const caseworker: Caseworker = {
+      ...insertCaseworker,
+      id,
+      createdAt: new Date(),
+      isActive: insertCaseworker.isActive ?? true,
+      role: insertCaseworker.role ?? "caseworker",
+    };
+    this.caseworkers.set(id, caseworker);
+    await this.saveData();
+    return caseworker;
+  }
+
+  async getCaseworker(id: string): Promise<Caseworker | undefined> {
+    return this.caseworkers.get(id);
+  }
+
+  async getCaseworkerByEmail(email: string): Promise<Caseworker | undefined> {
+    return Array.from(this.caseworkers.values()).find((cw) => cw.email === email);
+  }
+
+  async getCaseworkersByOrg(orgId: string): Promise<Caseworker[]> {
+    return Array.from(this.caseworkers.values()).filter((cw) => cw.orgId === orgId);
+  }
+
+  // User methods
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const id = randomUUID();
+    const user: User = {
+      id,
+      createdAt: new Date(),
+      isActive: insertUser.isActive ?? true,
+      orgId: insertUser.orgId ?? null,
+      caseworkerId: insertUser.caseworkerId ?? null,
+      pin: insertUser.pin ?? null,
+      deviceId: insertUser.deviceId ?? null,
+    };
+    this.users.set(id, user);
+    await this.saveData();
+    return user;
+  }
+
+  async getUser(id: string): Promise<User | undefined> {
+    return this.users.get(id);
+  }
+
+  async getUsersByOrg(orgId: string | null): Promise<User[]> {
+    return Array.from(this.users.values()).filter((user) => user.orgId === orgId);
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+
+    const updatedUser = { ...user, ...updates };
+    this.users.set(id, updatedUser);
+    await this.saveData();
+    return updatedUser;
+  }
+
+  // Work Type methods
+  async createWorkType(insertWorkType: InsertWorkType): Promise<WorkType> {
+    const id = randomUUID();
+    const workType: WorkType = {
+      id,
+      color: insertWorkType.color ?? null,
+      name: insertWorkType.name,
+      icon: insertWorkType.icon ?? null,
+      createdAt: new Date(),
+      isActive: insertWorkType.isActive ?? true,
+      orgId: insertWorkType.orgId ?? null,
+      userId: insertWorkType.userId ?? null,
+      isDefault: insertWorkType.isDefault ?? false,
+      sortOrder: insertWorkType.sortOrder ?? 0,
+    };
+    this.workTypes.set(id, workType);
+    await this.saveData();
+    return workType;
+  }
+
+  async getWorkType(id: string): Promise<WorkType | undefined> {
+    return this.workTypes.get(id);
+  }
+
+  async getWorkTypesByUser(userId: string): Promise<WorkType[]> {
+    return Array.from(this.workTypes.values())
+      .filter((wt) => wt.userId === userId && wt.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  async getWorkTypesByOrg(orgId: string): Promise<WorkType[]> {
+    return Array.from(this.workTypes.values())
+      .filter((wt) => wt.orgId === orgId && wt.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  async updateWorkType(id: string, updates: Partial<WorkType>): Promise<WorkType | undefined> {
+    const workType = this.workTypes.get(id);
+    if (!workType) return undefined;
+
+    const updatedWorkType = { ...workType, ...updates };
+    this.workTypes.set(id, updatedWorkType);
+    await this.saveData();
+    return updatedWorkType;
+  }
+
+  async deleteWorkType(id: string): Promise<void> {
+    const workType = this.workTypes.get(id);
+    if (workType) {
+      workType.isActive = false;
+      this.workTypes.set(id, workType);
+      await this.saveData();
+    }
   }
 
   // Session methods
-  async getActiveSession(): Promise<Session | undefined> {
-    return Array.from(this.sessions.values()).find((session) => session.isActive);
+  async getActiveSession(userId?: string, orgId?: string | null): Promise<Session | undefined> {
+    let sessions = Array.from(this.sessions.values()).filter((session) => session.isActive);
+
+    // Filter by userId if provided
+    if (userId !== undefined) {
+      sessions = sessions.filter((s) => s.userId === userId);
+    }
+
+    // Filter by orgId if provided (null means free tier)
+    if (orgId !== undefined) {
+      sessions = sessions.filter((s) => s.orgId === orgId);
+    }
+
+    return sessions[0];
   }
 
   async createSession(insertSession: InsertSession): Promise<Session> {
@@ -151,6 +363,9 @@ export class MemStorage implements IStorage {
       endTime: null,
       isActive: true,
       isTest: insertSession.isTest ?? false,
+      orgId: insertSession.orgId ?? null,
+      userId: insertSession.userId ?? null,
+      workTypeId: insertSession.workTypeId ?? null,
     };
     this.sessions.set(id, session);
     await this.saveData();
@@ -171,18 +386,31 @@ export class MemStorage implements IStorage {
     return this.sessions.get(id);
   }
 
-  async getAllSessions(): Promise<Session[]> {
-    return Array.from(this.sessions.values());
+  async getAllSessions(orgId?: string | null): Promise<Session[]> {
+    let sessions = Array.from(this.sessions.values());
+
+    // Filter by orgId if provided (null means free tier, undefined means all)
+    if (orgId !== undefined) {
+      sessions = sessions.filter((s) => s.orgId === orgId);
+    }
+
+    return sessions;
   }
 
   // Transaction methods
   async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
     const id = randomUUID();
     const transaction: Transaction = {
-      ...insertTransaction,
+      type: insertTransaction.type,
       id,
+      note: insertTransaction.note ?? null,
+      sessionId: insertTransaction.sessionId ?? null,
+      pennies: insertTransaction.pennies ?? null,
+      amount: insertTransaction.amount,
+      orgId: insertTransaction.orgId ?? null,
+      userId: insertTransaction.userId ?? null,
+      workTypeId: insertTransaction.workTypeId ?? null,
       timestamp: new Date(),
-      pennies: insertTransaction.pennies ?? 0,
       productId: insertTransaction.productId ?? null,
     };
     this.transactions.set(id, transaction);
@@ -196,30 +424,30 @@ export class MemStorage implements IStorage {
     );
   }
 
-  async getAllTransactions(): Promise<Transaction[]> {
-    return Array.from(this.transactions.values());
+  async getAllTransactions(orgId?: string | null): Promise<Transaction[]> {
+    let transactions = Array.from(this.transactions.values());
+
+    // Filter by orgId if provided (null means free tier, undefined means all)
+    if (orgId !== undefined) {
+      transactions = transactions.filter((t) => t.orgId === orgId);
+    }
+
+    return transactions;
   }
 
-  // Product methods
-  async getProducts(): Promise<Product[]> {
-    return Array.from(this.products.values()).filter((product) => product.isActive);
-  }
-
-  async getProduct(id: string): Promise<Product | undefined> {
-    return this.products.get(id);
-  }
-
-  async createProduct(insertProduct: InsertProduct): Promise<Product> {
-    const id = randomUUID();
-    const product: Product = { 
-      ...insertProduct, 
-      id,
-      isActive: insertProduct.isActive ?? true,
-    };
-    this.products.set(id, product);
-    await this.saveData();
-    return product;
-  }
 }
 
-export const storage = new MemStorage();
+// Export storage singleton - uses DB if DATABASE_URL is set, otherwise uses memory
+let storageInstance: IStorage;
+
+if (process.env.DATABASE_URL) {
+  console.log("Using PostgreSQL database storage");
+  // Lazy load to avoid import errors when DATABASE_URL isn't set
+  const { dbStorage } = await import("./db-storage");
+  storageInstance = dbStorage;
+} else {
+  console.log("Using in-memory JSON file storage (DATABASE_URL not set)");
+  storageInstance = new MemStorage();
+}
+
+export const storage = storageInstance;

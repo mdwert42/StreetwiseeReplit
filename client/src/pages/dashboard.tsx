@@ -1,24 +1,36 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Play, Square, Plus, DollarSign, Clock, TrendingUp, Target } from "lucide-react";
+import { Play, Square, Plus, Target, Zap, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { DonationModal } from "../components/donation-modal";
+import { QuickDonationModal } from "../components/quick-donation-modal";
 import { TotalBreakdownModal } from "../components/total-breakdown-modal";
 import { GoalModal } from "../components/goal-modal";
+import { WorkTypesModal } from "../components/work-types-modal";
 import { useSettings } from "@/contexts/settings-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Session } from "@shared/schema";
+import type { Session, WorkType } from "@shared/schema";
 
 export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isQuickDonationModalOpen, setIsQuickDonationModalOpen] = useState(false);
   const [isTotalModalOpen, setIsTotalModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [isWorkTypesModalOpen, setIsWorkTypesModalOpen] = useState(false);
   const [location, setLocation] = useState("");
+  const [selectedWorkType, setSelectedWorkType] = useState<string>("");
   const [isTestSession, setIsTestSession] = useState(false);
   const [sessionDuration, setSessionDuration] = useState(0);
   const { toast } = useToast();
@@ -27,6 +39,19 @@ export default function Dashboard() {
   // Fetch active session and total
   const { data: activeSession, isLoading: sessionLoading } = useQuery<Session | null>({
     queryKey: ["/api/session/active"],
+  });
+
+  // Fetch work types (using free-tier userId for now)
+  const { data: workTypes = [] } = useQuery<WorkType[]>({
+    queryKey: ["/api/work-types", "free-tier"],
+    queryFn: async () => {
+      const response = await fetch("/api/work-types?userId=free-tier");
+      if (!response.ok) {
+        if (response.status === 400) return [];
+        throw new Error("Failed to fetch work types");
+      }
+      return response.json();
+    },
   });
 
   // Fetch totals for all timeframes
@@ -76,6 +101,7 @@ export default function Dashboard() {
     mutationFn: async () => {
       return await apiRequest("POST", "/api/session/start", {
         location: location.trim(),
+        workTypeId: selectedWorkType || null,
         isTest: isTestSession,
       });
     },
@@ -119,30 +145,6 @@ export default function Dashboard() {
     },
   });
 
-  // Product sale mutation
-  const productSaleMutation = useMutation({
-    mutationFn: async ({ productId, amount }: { productId: string; amount: number }) => {
-      return await apiRequest("POST", "/api/transaction/product", {
-        sessionId: activeSession?.id,
-        amount: amount.toFixed(2),
-        productId,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/total"] });
-      toast({
-        title: "Product Sale Recorded",
-        description: "Sale added successfully.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to record product sale.",
-        variant: "destructive",
-      });
-    },
-  });
 
   const handleStartStop = async () => {
     if (hasActiveSession) {
@@ -153,15 +155,9 @@ export default function Dashboard() {
     }
   };
 
-  const handleProductSale = async (productId: string, amount: number) => {
-    if (!activeSession) return;
-    productSaleMutation.mutate({ productId, amount });
-  };
-
   const isProcessing =
     startSessionMutation.isPending ||
-    stopSessionMutation.isPending ||
-    productSaleMutation.isPending;
+    stopSessionMutation.isPending;
 
   return (
     <div className="min-h-screen bg-background">
@@ -175,6 +171,17 @@ export default function Dashboard() {
           title={settings.dailyGoal ? `Goal: $${settings.dailyGoal}` : "Set daily goal"}
         >
           <Target className="h-5 w-5" />
+        </Button>
+
+        {/* Work Types Button - Top Right, below Goal */}
+        <Button
+          onClick={() => setIsWorkTypesModalOpen(true)}
+          variant="outline"
+          size="icon"
+          className="absolute top-[4.5rem] right-4 z-10 h-10 w-10 rounded-full"
+          title="Manage work types"
+        >
+          <Briefcase className="h-5 w-5" />
         </Button>
 
         {/* Total Display - Large and Prominent */}
@@ -238,6 +245,35 @@ export default function Dashboard() {
               />
             </div>
 
+            <div>
+              <Label htmlFor="work-type" className="text-sm font-medium">
+                Work Type (Optional)
+              </Label>
+              <Select
+                value={selectedWorkType}
+                onValueChange={setSelectedWorkType}
+                disabled={hasActiveSession || isProcessing}
+              >
+                <SelectTrigger className="mt-1.5 h-11">
+                  <SelectValue placeholder="Select work type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {workTypes.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      No work types yet. Click the briefcase icon to add some!
+                    </div>
+                  ) : (
+                    workTypes.map((workType) => (
+                      <SelectItem key={workType.id} value={workType.id}>
+                        {workType.icon && `${workType.icon} `}
+                        {workType.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex items-center justify-between p-3 rounded-lg border-2 border-dashed border-border bg-muted/20">
               <Label
                 htmlFor="test-session"
@@ -286,61 +322,16 @@ export default function Dashboard() {
 
         {/* Action Buttons */}
         {hasActiveSession && (
-          <div className="space-y-4">
-            <Button
-              data-testid="button-record-donation"
-              onClick={() => setIsModalOpen(true)}
-              disabled={isProcessing}
-              className="w-full h-14 text-base font-semibold"
-              variant="default"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Record Donation
-            </Button>
-
-            {/* Product Buttons */}
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Quick Sales</p>
-              <div className="space-y-2">
-                <Button
-                  data-testid="button-product-1"
-                  onClick={() => handleProductSale("product-100", 1)}
-                  disabled={isProcessing}
-                  variant="outline"
-                  className="w-full h-12 justify-between text-base"
-                >
-                  <span className="font-semibold">Good Advice</span>
-                  <span className="flex items-center text-muted-foreground">
-                    <DollarSign className="w-4 h-4" />1.00
-                  </span>
-                </Button>
-                <Button
-                  data-testid="button-product-5"
-                  onClick={() => handleProductSale("product-500", 5)}
-                  disabled={isProcessing}
-                  variant="outline"
-                  className="w-full h-12 justify-between text-base"
-                >
-                  <span className="font-semibold">Bad Advice</span>
-                  <span className="flex items-center text-muted-foreground">
-                    <DollarSign className="w-4 h-4" />5.00
-                  </span>
-                </Button>
-                <Button
-                  data-testid="button-product-10"
-                  onClick={() => handleProductSale("product-1000", 10)}
-                  disabled={isProcessing}
-                  variant="outline"
-                  className="w-full h-12 justify-between text-base"
-                >
-                  <span className="font-semibold">Keychain</span>
-                  <span className="flex items-center text-muted-foreground">
-                    <DollarSign className="w-4 h-4" />10.00
-                  </span>
-                </Button>
-              </div>
-            </div>
-          </div>
+          <Button
+            data-testid="button-record-donation"
+            onClick={() => setIsModalOpen(true)}
+            disabled={isProcessing}
+            className="w-full h-14 text-base font-semibold"
+            variant="default"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Record Donation
+          </Button>
         )}
 
         {/* Empty State */}
@@ -359,6 +350,19 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* Quick Donation Button (when no session) */}
+        {!hasActiveSession && (
+          <Button
+            data-testid="button-quick-donation"
+            onClick={() => setIsQuickDonationModalOpen(true)}
+            className="w-full h-14 text-base font-semibold"
+            variant="secondary"
+          >
+            <Zap className="w-5 h-5 mr-2" />
+            Quick Donation
+          </Button>
+        )}
       </div>
 
       {/* Donation Modal */}
@@ -366,6 +370,12 @@ export default function Dashboard() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         sessionId={activeSession?.id}
+      />
+
+      {/* Quick Donation Modal */}
+      <QuickDonationModal
+        open={isQuickDonationModalOpen}
+        onOpenChange={setIsQuickDonationModalOpen}
       />
 
       {/* Total Breakdown Modal */}
@@ -385,6 +395,13 @@ export default function Dashboard() {
         currentTotal={todayData?.total ?? 0}
         goal={settings.dailyGoal}
         onSetGoal={(goal) => updateSettings({ dailyGoal: goal })}
+      />
+
+      {/* Work Types Modal */}
+      <WorkTypesModal
+        open={isWorkTypesModalOpen}
+        onOpenChange={setIsWorkTypesModalOpen}
+        userId="free-tier"
       />
     </div>
   );
