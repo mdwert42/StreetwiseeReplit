@@ -7,11 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned for v0.2.0
-- Work types (configurable categories for income tracking)
-- Quick donations (record income outside of sessions)
-- Work type filtering in totals
-- Settings screen
+## [0.2.0] - 2025-01-26
+
+### Added
+- **Work Types Feature**
+  - Configurable work type categories (e.g., "Panhandling", "Food Delivery", "Street Performance")
+  - Work types management modal with add/delete functionality
+  - Optional emoji icons for work types
+  - Custom sorting order support
+  - User-specific work types (isolated by userId/orgId)
+  - Work type selector dropdown in session start flow
+  - Work type tagging for sessions
+
+- **Quick Donations Feature**
+  - Record donations without starting a session
+  - Quick donation button on main screen (when no session active)
+  - Quick donation modal with denomination selection
+  - Optional note field (200 char limit) for context
+  - Quick donations included in all totals
+  - Dedicated API endpoint for quick donations
+
+- **API Enhancements**
+  - GET /api/work-types - Fetch work types by userId/orgId
+  - POST /api/work-types - Create new work type
+  - PUT /api/work-types/:id - Update work type
+  - DELETE /api/work-types/:id - Soft delete work type
+  - POST /api/transaction/quick-donation - Record donation without session
+
+- **Schema Updates**
+  - work_types table with icon, color, sortOrder, isActive
+  - sessions.work_type_id for categorizing sessions
+  - transactions.session_id now nullable (for quick donations)
+  - transactions.work_type_id for denormalized filtering
+  - transactions.note field for optional context
+
+- **Testing & Documentation**
+  - 10 new unit tests for work types (25+ total passing tests)
+  - Comprehensive TESTING.md with manual test procedures
+  - API testing examples with curl commands
+  - Edge case testing scenarios
+
+### Changed
+- Totals calculation updated to include quick donations (null sessionId)
+- Session creation now accepts optional workTypeId
+- Donation endpoint supports nullable sessionId
+
+### Technical
+- Work type CRUD in both MemStorage and DbStorage
+- Soft delete implementation for work types (isActive flag)
+- Work types sorted by sortOrder in all queries
+- User/org isolation for work types
+- React Query integration for work types
+- Select component for work type dropdown
 
 ## [0.1.0] - 2025-01-26
 
