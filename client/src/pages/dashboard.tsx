@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Play, Square, Plus, Target } from "lucide-react";
+import { Play, Square, Plus, Target, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { DonationModal } from "../components/donation-modal";
+import { QuickDonationModal } from "../components/quick-donation-modal";
 import { TotalBreakdownModal } from "../components/total-breakdown-modal";
 import { GoalModal } from "../components/goal-modal";
 import { useSettings } from "@/contexts/settings-context";
@@ -16,6 +17,7 @@ import type { Session } from "@shared/schema";
 
 export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isQuickDonationModalOpen, setIsQuickDonationModalOpen] = useState(false);
   const [isTotalModalOpen, setIsTotalModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [location, setLocation] = useState("");
@@ -284,6 +286,19 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* Quick Donation Button (when no session) */}
+        {!hasActiveSession && (
+          <Button
+            data-testid="button-quick-donation"
+            onClick={() => setIsQuickDonationModalOpen(true)}
+            className="w-full h-14 text-base font-semibold"
+            variant="secondary"
+          >
+            <Zap className="w-5 h-5 mr-2" />
+            Quick Donation
+          </Button>
+        )}
       </div>
 
       {/* Donation Modal */}
@@ -291,6 +306,12 @@ export default function Dashboard() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         sessionId={activeSession?.id}
+      />
+
+      {/* Quick Donation Modal */}
+      <QuickDonationModal
+        open={isQuickDonationModalOpen}
+        onOpenChange={setIsQuickDonationModalOpen}
       />
 
       {/* Total Breakdown Modal */}
