@@ -1,26 +1,36 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Play, Square, Plus, Target, Zap } from "lucide-react";
+import { Play, Square, Plus, Target, Zap, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { DonationModal } from "../components/donation-modal";
 import { QuickDonationModal } from "../components/quick-donation-modal";
 import { TotalBreakdownModal } from "../components/total-breakdown-modal";
 import { GoalModal } from "../components/goal-modal";
+import { WorkTypesModal } from "../components/work-types-modal";
 import { useSettings } from "@/contexts/settings-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Session } from "@shared/schema";
+import type { Session, WorkType } from "@shared/schema";
 
 export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQuickDonationModalOpen, setIsQuickDonationModalOpen] = useState(false);
   const [isTotalModalOpen, setIsTotalModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [isWorkTypesModalOpen, setIsWorkTypesModalOpen] = useState(false);
   const [location, setLocation] = useState("");
+  const [selectedWorkType, setSelectedWorkType] = useState<string>("");
   const [isTestSession, setIsTestSession] = useState(false);
   const [sessionDuration, setSessionDuration] = useState(0);
   const { toast } = useToast();
@@ -29,6 +39,19 @@ export default function Dashboard() {
   // Fetch active session and total
   const { data: activeSession, isLoading: sessionLoading } = useQuery<Session | null>({
     queryKey: ["/api/session/active"],
+  });
+
+  // Fetch work types (using free-tier userId for now)
+  const { data: workTypes = [] } = useQuery<WorkType[]>({
+    queryKey: ["/api/work-types", "free-tier"],
+    queryFn: async () => {
+      const response = await fetch("/api/work-types?userId=free-tier");
+      if (!response.ok) {
+        if (response.status === 400) return [];
+        throw new Error("Failed to fetch work types");
+      }
+      return response.json();
+    },
   });
 
   // Fetch totals for all timeframes
@@ -78,6 +101,7 @@ export default function Dashboard() {
     mutationFn: async () => {
       return await apiRequest("POST", "/api/session/start", {
         location: location.trim(),
+        workTypeId: selectedWorkType || null,
         isTest: isTestSession,
       });
     },
@@ -149,6 +173,17 @@ export default function Dashboard() {
           <Target className="h-5 w-5" />
         </Button>
 
+        {/* Work Types Button - Top Right, below Goal */}
+        <Button
+          onClick={() => setIsWorkTypesModalOpen(true)}
+          variant="outline"
+          size="icon"
+          className="absolute top-[4.5rem] right-4 z-10 h-10 w-10 rounded-full"
+          title="Manage work types"
+        >
+          <Briefcase className="h-5 w-5" />
+        </Button>
+
         {/* Total Display - Large and Prominent */}
         <Card className="border-card-border">
           <CardContent className="p-6 text-center">
@@ -208,6 +243,35 @@ export default function Dashboard() {
                 disabled={hasActiveSession || isProcessing}
                 className="mt-1.5 h-11"
               />
+            </div>
+
+            <div>
+              <Label htmlFor="work-type" className="text-sm font-medium">
+                Work Type (Optional)
+              </Label>
+              <Select
+                value={selectedWorkType}
+                onValueChange={setSelectedWorkType}
+                disabled={hasActiveSession || isProcessing}
+              >
+                <SelectTrigger className="mt-1.5 h-11">
+                  <SelectValue placeholder="Select work type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {workTypes.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      No work types yet. Click the briefcase icon to add some!
+                    </div>
+                  ) : (
+                    workTypes.map((workType) => (
+                      <SelectItem key={workType.id} value={workType.id}>
+                        {workType.icon && `${workType.icon} `}
+                        {workType.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center justify-between p-3 rounded-lg border-2 border-dashed border-border bg-muted/20">
@@ -331,6 +395,13 @@ export default function Dashboard() {
         currentTotal={todayData?.total ?? 0}
         goal={settings.dailyGoal}
         onSetGoal={(goal) => updateSettings({ dailyGoal: goal })}
+      />
+
+      {/* Work Types Modal */}
+      <WorkTypesModal
+        open={isWorkTypesModalOpen}
+        onOpenChange={setIsWorkTypesModalOpen}
+        userId="free-tier"
       />
     </div>
   );
