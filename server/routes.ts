@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertSessionSchema, insertTransactionSchema, insertWorkTypeSchema } from "@shared/schema";
+import { autoSeedIfNeeded, seedDefaultWorkTypesForUser, seedDefaultWorkTypesForOrg } from "./seed-defaults";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get active session
@@ -10,6 +11,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeSession = await storage.getActiveSession();
       res.json(activeSession || null);
     } catch (error) {
+      console.error("Error getting active session:", error);
       res.status(500).json({ error: "Failed to get active session" });
     }
   });
@@ -166,6 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(workTypes);
     } catch (error) {
+      console.error("Error getting work types:", error);
       res.status(500).json({ error: "Failed to get work types" });
     }
   });
@@ -227,7 +230,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const transaction = await storage.createTransaction(validatedData);
       res.json(transaction);
     } catch (error) {
+      console.error("Error recording quick donation:", error);
       res.status(400).json({ error: "Failed to record quick donation" });
+    }
+  });
+
+  // Seed default work types
+  app.post("/api/seed/work-types", async (req, res) => {
+    try {
+      const { userId, orgId, force } = req.body;
+
+      if (!userId && !orgId) {
+        return res.status(400).json({ error: "userId or orgId required" });
+      }
+
+      // Check if already has work types (unless force=true)
+      if (!force) {
+        const alreadySeeded = await autoSeedIfNeeded(userId, orgId);
+        if (!alreadySeeded) {
+          return res.json({
+            message: "Work types already exist, use force=true to seed anyway",
+            seeded: false
+          });
+        }
+        return res.json({ message: "Default work types seeded", seeded: true });
+      }
+
+      // Force seed
+      if (userId) {
+        await seedDefaultWorkTypesForUser(userId);
+      } else if (orgId) {
+        await seedDefaultWorkTypesForOrg(orgId);
+      }
+
+      res.json({ message: "Default work types seeded", seeded: true });
+    } catch (error) {
+      console.error("Error seeding work types:", error);
+      res.status(500).json({ error: "Failed to seed work types" });
     }
   });
 
